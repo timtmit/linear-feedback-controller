@@ -113,13 +113,13 @@ CallbackReturn LinearFeedbackControllerRos::on_activate(
   // Assign the command interface.
   all_good &= controller_interface::get_ordered_interfaces(
       command_interfaces_, parameters_.chainable_controller.command_interfaces,
-      "", joint_effort_command_interface_);
+      "", joint_command_interface_);
   if (!all_good || parameters_.chainable_controller.command_interfaces.size() !=
-                       joint_effort_command_interface_.size()) {
+                       joint_command_interface_.size()) {
     RCLCPP_ERROR(this->get_node()->get_logger(),
                  "Expected %zu command interfaces, got %zu",
                  parameters_.chainable_controller.command_interfaces.size(),
-                 joint_effort_command_interface_.size());
+                 joint_command_interface_.size());
     return controller_interface::CallbackReturn::ERROR;
   }
 
@@ -137,7 +137,7 @@ bool LinearFeedbackControllerRos::on_set_chained_mode(bool /* chained_mode */) {
 CallbackReturn LinearFeedbackControllerRos::on_deactivate(
     const rclcpp_lifecycle::State& /*previous_state*/) {
   // Custom release interfaces for this controller.
-  joint_effort_command_interface_.clear();
+  joint_command_interface_.clear();
 
   // Default release interface from ros2_control.
   release_interfaces();
@@ -216,18 +216,18 @@ return_type LinearFeedbackControllerRos::update_and_write_commands(
   const auto joint_nv = lfc_.get_robot_model()->get_joint_nv();
   for (Eigen::Index i = 0; i < joint_nv; ++i) {
 #if CONTROLLER_INTERFACE_VERSION_AT_LEAST(4, 0, 0)  // jazzy version
-    bool ret = joint_effort_command_interface_[i].get().set_value(
+    bool ret = joint_command_interface_[i].get().set_value(
         output_joint_effort_[i]);
     if (!ret) {
       RCLCPP_ERROR_STREAM(
           get_node()->get_logger(),
           "Error in writing command value ["
               << output_joint_effort_[i] << "] at this interface: ["
-              << joint_effort_command_interface_[i].get().get_name() << "]");
+              << joint_command_interface_[i].get().get_name() << "]");
       return controller_interface::return_type::ERROR;
     }
 #else  // humble version
-    joint_effort_command_interface_[i].get().set_value(output_joint_effort_[i]);
+    joint_command_interface_[i].get().set_value(output_joint_effort_[i]);
 #endif
   }
   return return_type::OK;
@@ -498,11 +498,30 @@ bool LinearFeedbackControllerRos::load_linear_feedback_controller(
   lfc_params.controlled_joint_names = parameters_.moving_joint_names;
   lfc_params.p_gains.clear();
   lfc_params.d_gains.clear();
-  for (const auto& joint_name : parameters_.moving_joint_names) {
-    lfc_params.p_gains.emplace_back(
-        parameters_.moving_joint_names_map.at(joint_name).p);
-    lfc_params.d_gains.emplace_back(
-        parameters_.moving_joint_names_map.at(joint_name).d);
+  for (size_t i = 0; i < lfc_params.moving_joint_names.size(); ++i) {
+    const std::string& joint_name = parameters_.moving_joint_names[i];
+    const auto& joint_params = parameters_.moving_joint_names_map.at(joint_name);
+
+    lfc_params.p_gains.emplace_back(joint_params.p);
+    lfc_params.d_gains.emplace_back(joint_params.d);
+
+    const std::string& interface_type = joint_params.interface_type;
+    if (interface_type == "effort") {
+      lfc_params.joint_effort_idx.push_back(static_cast<int>(i));
+    } else if (interface_type == "position") {
+      lfc_params.joint_position_idx.push_back(static_cast<int>(i));
+    } else if (interface_type == "velocity") {
+      lfc_params.joint_velocity_idx.push_back(static_cast<int>(i));
+    } else {
+      RCLCPP_ERROR(get_node()->get_logger(),
+                   "Unknown interface type '%s' for joint '%s'. "
+                   "Expected: effort, position, or velocity.",
+                   interface_type.c_str(), joint_name.c_str());
+      return false;
+    }
+    RCLCPP_INFO(get_node()->get_logger(),
+                "[LFC] Joint '%s' [%zu] : %s",
+                joint_name.c_str(), i, interface_type.c_str());
   }
   lfc_params.robot_has_free_flyer = parameters_.robot_has_free_flyer;
   lfc_params.pd_to_lf_transition_duration =
@@ -556,8 +575,8 @@ bool LinearFeedbackControllerRos::allocate_memory() {
 
   // Command vector (efforts) : one effort per controlled joint
   output_joint_effort_ = Eigen::VectorXd::Zero(joint_nv);
-  joint_effort_command_interface_.reserve(joint_nv);
-  joint_effort_command_interface_.clear();
+  joint_command_interface_.reserve(joint_nv);
+  joint_command_interface_.clear();
 
   // Name of the controlled joints
   input_sensor_.joint_state.name =
@@ -597,8 +616,14 @@ bool LinearFeedbackControllerRos::allocate_memory() {
       std::numeric_limits<double>::signaling_NaN());
 
   // The feedforward is also an effort per controlled joint
-  input_control_.feedforward = Eigen::VectorXd::Zero(joint_nv);
-  input_control_.feedforward.fill(std::numeric_limits<double>::signaling_NaN());
+  input_control_.feedforward.effort       = Eigen::VectorXd::Zero(joint_nv);
+  input_control_.feedforward.position     = Eigen::VectorXd::Zero(joint_nv);
+  input_control_.feedforward.velocity     = Eigen::VectorXd::Zero(joint_nv);
+  input_control_.feedforward.acceleration = Eigen::VectorXd::Zero(joint_nv);
+  input_control_.feedforward.effort.fill(      std::numeric_limits<double>::signaling_NaN());
+  input_control_.feedforward.position.fill(    std::numeric_limits<double>::signaling_NaN());
+  input_control_.feedforward.velocity.fill(    std::numeric_limits<double>::signaling_NaN());
+  input_control_.feedforward.acceleration.fill(std::numeric_limits<double>::signaling_NaN());
 
   new_joint_velocity_ = Eigen::VectorXd::Zero(joint_nv);
   new_joint_velocity_.fill(std::numeric_limits<double>::signaling_NaN());

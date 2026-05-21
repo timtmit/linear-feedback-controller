@@ -49,6 +49,9 @@ ament_auto_find_build_dependencies()
 #
 # Generate the ROS2 parameters interface automatically.
 #
+find_package(tl_expected REQUIRED)
+find_package(parameter_traits REQUIRED)
+
 include(cmake/sec_generate_parameter_library.cmake)
 # Main node params
 sec_generate_parameter_library_markdown(${PROJECT_NAME}_parameters_doc

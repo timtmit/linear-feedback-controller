@@ -54,7 +54,7 @@ const Eigen::VectorXd& LFController::compute_control(
   diff_state_.tail(rmb_->get_model().nv) =
       desired_velocity_ - measured_velocity_;
   control_.noalias() =
-      control_msg.feedforward + control_msg.feedback_gain * diff_state_;
+      control_msg.feedforward.effort + control_msg.feedback_gain * diff_state_;
 
   return control_;
 }
