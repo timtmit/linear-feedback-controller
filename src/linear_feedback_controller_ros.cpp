@@ -216,8 +216,8 @@ return_type LinearFeedbackControllerRos::update_and_write_commands(
   const auto joint_nv = lfc_.get_robot_model()->get_joint_nv();
   for (Eigen::Index i = 0; i < joint_nv; ++i) {
 #if CONTROLLER_INTERFACE_VERSION_AT_LEAST(4, 0, 0)  // jazzy version
-    bool ret = joint_command_interface_[i].get().set_value(
-        output_joint_effort_[i]);
+    bool ret =
+        joint_command_interface_[i].get().set_value(output_joint_effort_[i]);
     if (!ret) {
       RCLCPP_ERROR_STREAM(
           get_node()->get_logger(),
@@ -500,7 +500,8 @@ bool LinearFeedbackControllerRos::load_linear_feedback_controller(
   lfc_params.d_gains.clear();
   for (size_t i = 0; i < lfc_params.moving_joint_names.size(); ++i) {
     const std::string& joint_name = parameters_.moving_joint_names[i];
-    const auto& joint_params = parameters_.moving_joint_names_map.at(joint_name);
+    const auto& joint_params =
+        parameters_.moving_joint_names_map.at(joint_name);
 
     lfc_params.p_gains.emplace_back(joint_params.p);
     lfc_params.d_gains.emplace_back(joint_params.d);
@@ -519,8 +520,7 @@ bool LinearFeedbackControllerRos::load_linear_feedback_controller(
                    interface_type.c_str(), joint_name.c_str());
       return false;
     }
-    RCLCPP_INFO(get_node()->get_logger(),
-                "[LFC] Joint '%s' [%zu] : %s",
+    RCLCPP_INFO(get_node()->get_logger(), "[LFC] Joint '%s' [%zu] : %s",
                 joint_name.c_str(), i, interface_type.c_str());
   }
   lfc_params.robot_has_free_flyer = parameters_.robot_has_free_flyer;
@@ -616,14 +616,18 @@ bool LinearFeedbackControllerRos::allocate_memory() {
       std::numeric_limits<double>::signaling_NaN());
 
   // The feedforward is also an effort per controlled joint
-  input_control_.feedforward.effort       = Eigen::VectorXd::Zero(joint_nv);
-  input_control_.feedforward.position     = Eigen::VectorXd::Zero(joint_nv);
-  input_control_.feedforward.velocity     = Eigen::VectorXd::Zero(joint_nv);
+  input_control_.feedforward.effort = Eigen::VectorXd::Zero(joint_nv);
+  input_control_.feedforward.position = Eigen::VectorXd::Zero(joint_nv);
+  input_control_.feedforward.velocity = Eigen::VectorXd::Zero(joint_nv);
   input_control_.feedforward.acceleration = Eigen::VectorXd::Zero(joint_nv);
-  input_control_.feedforward.effort.fill(      std::numeric_limits<double>::signaling_NaN());
-  input_control_.feedforward.position.fill(    std::numeric_limits<double>::signaling_NaN());
-  input_control_.feedforward.velocity.fill(    std::numeric_limits<double>::signaling_NaN());
-  input_control_.feedforward.acceleration.fill(std::numeric_limits<double>::signaling_NaN());
+  input_control_.feedforward.effort.fill(
+      std::numeric_limits<double>::signaling_NaN());
+  input_control_.feedforward.position.fill(
+      std::numeric_limits<double>::signaling_NaN());
+  input_control_.feedforward.velocity.fill(
+      std::numeric_limits<double>::signaling_NaN());
+  input_control_.feedforward.acceleration.fill(
+      std::numeric_limits<double>::signaling_NaN());
 
   new_joint_velocity_ = Eigen::VectorXd::Zero(joint_nv);
   new_joint_velocity_.fill(std::numeric_limits<double>::signaling_NaN());

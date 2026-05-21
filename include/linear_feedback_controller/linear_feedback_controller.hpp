@@ -90,9 +90,11 @@ class LINEAR_FEEDBACK_CONTROLLER_PUBLIC LinearFeedbackController {
   Eigen::VectorXd control_pd_;
   /// @brief Temporary variable for PD output used in PD to LF transition phase.
   Eigen::VectorXd control_lf_;
-  /// @brief Temporary variable for integration used in PD to control joint with position control.
+  /// @brief Temporary variable for integration used in PD to control joint with
+  /// position control.
   Eigen::VectorXd integrated_position_;
-  /// @brief Temporary variable for integration used in PD to control joint with velocity control.
+  /// @brief Temporary variable for integration used in PD to control joint with
+  /// velocity control.
   Eigen::VectorXd integrated_velocity_;
   /// @brief Rigid body model of the robot.
   RobotModelBuilder::SharedPtr robot_model_builder_;
