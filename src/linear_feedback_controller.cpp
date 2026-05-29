@@ -36,6 +36,7 @@ bool LinearFeedbackController::load(const ControllerParameters& params) {
   tau_gravity_ = Eigen::VectorXd::Zero(robot_model_builder_->get_joint_nv());
   control_pd_ = Eigen::VectorXd::Zero(robot_model_builder_->get_joint_nv());
   control_lf_ = Eigen::VectorXd::Zero(robot_model_builder_->get_joint_nv());
+  control_ = Eigen::VectorXd::Zero(robot_model_builder_->get_joint_nv());
   integrated_position_ =
       Eigen::VectorXd::Zero(robot_model_builder_->get_joint_nv());
   integrated_velocity_ =
@@ -137,71 +138,58 @@ const Eigen::VectorXd& LinearFeedbackController::compute_control(
     throw std::invalid_argument(ss.str());
   }
 
-  // Compute pd control on at the start or during switch and if there are effort
-  // joint
-  if ((!first_control_received_time_initialized || during_switch) &&
-      !params_.joint_effort_idx.empty()) {
-    control_pd_ =
-        pd_controller_.compute_control(sensor_js.position, sensor_js.velocity);
+  // PD Control Phase
+  if (!first_control_received_time_initialized) {
+    control_pd_ = pd_controller_.compute_control(sensor_js.position, sensor_js.velocity);
+    if (remove_gravity_compensation_effort) control_pd_ -= tau_init_;
+
+    // Effort joints : PD
+    for (int i : params_.joint_effort_idx) control_(i) = control_pd_(i);
+    // Position joints : keep same position
+    for (int i : params_.joint_position_idx) control_(i) = sensor_js.position(i);
+    // Velocity joints : zero or same speed
+    for (int i : params_.joint_velocity_idx) control_(i) = sensor_js.velocity(i);
+
+    return control_;
   }
 
-  // Compute lf control  and perform integration only if the MPC has started
-  if (control_msg_received) {
-    // LF Control
+  // Integration
+  double delta_t = std::chrono::duration<double>(time - t0).count();
+  // v(t) = dq*(t0) + ddq*(t0) * delta_t
+  integrated_velocity_ = control.feedforward.velocity
+                       + control.feedforward.acceleration * delta_t;
+
+  integrated_position_ = pinocchio::integrate(robot_model_builder_->get_model(), control.feedforward.position, control.feedforward.velocity*delta_t);
+
+  // Switching Phase (PD -> LF)
+  if (during_switch) {
+    double weight = ((time - first_control_received_time_).count()) /
+                  params_.pd_to_lf_transition_duration.count();
+    weight = std::clamp(weight, 0.0, 1.0);
+    
+    control_pd_ = pd_controller_.compute_control(sensor_js.position, sensor_js.velocity);
     control_lf_ = lf_controller_.compute_control(sensor, control);
 
-    // Integration
-    double delta_t =
-        std::max(0.0, std::chrono::duration<double>(time - t0).count());
-    // v(t) = dq*(t0) + ddq*(t0) * delta_t
-    integrated_velocity_ = control.feedforward.velocity +
-                           control.feedforward.acceleration * delta_t;
-    // q(t) = q*(t0) + dq*(t0)*delta_t + 1/2 * ddq*(t0)*delat_t²
-    integrated_position_ =
-        control.feedforward.position + control.feedforward.velocity * delta_t +
-        0.5 * control.feedforward.acceleration * delta_t * delta_t;
+    if (remove_gravity_compensation_effort) {
+      control_pd_ -= tau_init_;
+      control_lf_ -= tau_gravity_;
+    }
+      for (int i : params_.joint_effort_idx) {
+        control_(i) = (1.0 - weight) * control_pd_(i) + weight * control_lf_(i);
+      }
+    // vel/pos : interpolation directe, pas de transition PD
+    for (int i : params_.joint_position_idx) control_(i) = integrated_position_(i);
+    for (int i : params_.joint_velocity_idx) control_(i) = integrated_velocity_(i);
+    return control_;
   }
 
-  // ----- COMMAND ROUTING -----
-
-  // --- EFFORT JOINTS ---
-  for (int i : params_.joint_effort_idx) {
-    if (!first_control_received_time_initialized) {
-      control_(i) = control_pd_(i) -
-                    (remove_gravity_compensation_effort ? tau_init_(i) : 0.0);
-    } else if (during_switch) {
-      double weight =
-          std::clamp(((time - first_control_received_time_).count()) /
-                         params_.pd_to_lf_transition_duration.count(),
-                     0.0, 1.0);
-      double cmd_pd = control_pd_(i) -
-                      (remove_gravity_compensation_effort ? tau_init_(i) : 0.0);
-      double cmd_lf =
-          control_lf_(i) -
-          (remove_gravity_compensation_effort ? tau_gravity_(i) : 0.0);
-      control_(i) = (1.0 - weight) * cmd_pd + weight * cmd_lf;
-    } else {
-      control_(i) =
-          control_lf_(i) -
-          (remove_gravity_compensation_effort ? tau_gravity_(i) : 0.0);
-    }
-  }
-  // --- POSITION JOINTS ---
-  for (int i : params_.joint_position_idx) {
-    if (!first_control_received_time_initialized) {
-      control_(i) = sensor_js.position(i);
-    } else {
-      control_(i) = integrated_position_(i);
-    }
-  }
-  // --- VELOCITY JOINTS ---
-  for (int i : params_.joint_velocity_idx) {
-    if (!first_control_received_time_initialized) {
-      control_(i) = 0.0;  // sensor_js.velocity(i);
-    } else {
-      control_(i) = integrated_velocity_(i);
-    }
-  }
+  // LF Control Phase
+  control_lf_ = lf_controller_.compute_control(sensor, control);
+  if (remove_gravity_compensation_effort) control_lf_ -= tau_gravity_;
+  // Commands routing
+  for (int i : params_.joint_effort_idx)   control_(i) = control_lf_(i);
+  for (int i : params_.joint_position_idx) control_(i) = integrated_position_(i);
+  for (int i : params_.joint_velocity_idx) control_(i) = integrated_velocity_(i);
 
   return control_;
 }

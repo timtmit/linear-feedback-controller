@@ -32,6 +32,8 @@
 #include "linear_feedback_controller/handle_ros_versions.hpp"
 #include "linear_feedback_controller/visibility.hpp"
 
+#include "std_msgs/msg/float64_multi_array.hpp"
+
 namespace linear_feedback_controller {
 
 using controller_interface::CallbackReturn;
@@ -198,6 +200,7 @@ class LINEAR_FEEDBACK_CONTROLLER_PUBLIC LinearFeedbackControllerRos
 
   // MPC communication
   rclcpp::Publisher<SensorMsg>::SharedPtr sensor_publisher_;
+  rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr debug_publisher_;
   rclcpp::Subscription<ControlMsg>::SharedPtr control_subscriber_;
   ProtectedControlMsg synched_input_control_msg_;
 

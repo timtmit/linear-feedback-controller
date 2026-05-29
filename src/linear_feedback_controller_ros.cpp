@@ -191,7 +191,7 @@ return_type LinearFeedbackControllerRos::update_and_write_commands(
   sensor_publisher_->publish(input_sensor_msg_);
 
   // Get the current time.
-  TimePoint time_lfc = TimePoint(Duration(time.seconds()));
+  TimePoint time_lfc = TimePoint(std::chrono::nanoseconds(time.nanoseconds()));
 
   // Copy the last control received:
   synched_input_control_msg_.mutex.lock();
@@ -211,9 +211,17 @@ return_type LinearFeedbackControllerRos::update_and_write_commands(
                             << output_joint_effort_.transpose());
     return controller_interface::return_type::ERROR;
   }
+  const TimePoint t0 = TimePoint(std::chrono::nanoseconds(input_control_.initial_state.stamp.nanoseconds()));
+  RCLCPP_INFO(get_node()->get_logger(),"%f", std::chrono::duration<double>(time_lfc - t0).count());
 
   // Write the output of the control (joint effort), in the command interface.
   const auto joint_nv = lfc_.get_robot_model()->get_joint_nv();
+  std_msgs::msg::Float64MultiArray msg;
+  msg.data.resize(joint_nv);
+  for (Eigen::Index i = 0; i < joint_nv; ++i) {
+    msg.data[i] = output_joint_effort_[i];
+  }
+  debug_publisher_->publish(msg);
   for (Eigen::Index i = 0; i < joint_nv; ++i) {
 #if CONTROLLER_INTERFACE_VERSION_AT_LEAST(4, 0, 0)  // jazzy version
     bool ret =
@@ -638,6 +646,7 @@ bool LinearFeedbackControllerRos::allocate_memory() {
   using namespace std::placeholders;
 
   sensor_publisher_ = get_node()->create_publisher<SensorMsg>("sensor", qos);
+  debug_publisher_ = get_node()->create_publisher<std_msgs::msg::Float64MultiArray>("/debug_lfc", qos);
   control_subscriber_ = get_node()->create_subscription<ControlMsg>(
       "control", qos,
       std::bind(&LinearFeedbackControllerRos::control_subscription_callback,
