@@ -70,6 +70,7 @@ bool LinearFeedbackController::set_initial_state(
 
   pd_controller_.set_reference(tau_init, jq_init);
   tau_init_ = tau_init;
+  integrated_position_.tail(jq_init.size())= jq_init;
   return true;
 }
 
@@ -148,7 +149,7 @@ const Eigen::VectorXd& LinearFeedbackController::compute_control(
     // Position joints : keep same position
     for (int i : params_.joint_position_idx) control_(i) = sensor_js.position(i);
     // Velocity joints : zero or same speed
-    for (int i : params_.joint_velocity_idx) control_(i) = sensor_js.velocity(i);
+    for (int i : params_.joint_velocity_idx) control_(i) = 0.0;
 
     return control_;
   }
@@ -156,11 +157,15 @@ const Eigen::VectorXd& LinearFeedbackController::compute_control(
   // Integration
   double delta_t = std::chrono::duration<double>(time - t0).count();
   // v(t) = dq*(t0) + ddq*(t0) * delta_t
-  integrated_velocity_ = control.feedforward.velocity
-                       + control.feedforward.acceleration * delta_t;
+  integrated_velocity_ += control.feedforward.acceleration * delta_t;
 
-  integrated_position_ = pinocchio::integrate(robot_model_builder_->get_model(), control.feedforward.position, control.feedforward.velocity*delta_t);
-
+  // integrated_position_ = pinocchio::integrate(robot_model_builder_->get_model(), integrated_position_, control.feedforward.velocity*delta_t);
+  // q(t) = q0 + v0 * delta_t + 0.5 * a0 * delta_t^2
+  integrated_position_ = pinocchio::integrate(
+      robot_model_builder_->get_model(), 
+      integrated_position_, 
+      integrated_velocity_ + 0.5 * control.feedforward.acceleration * delta_t * delta_t
+  );
   // Switching Phase (PD -> LF)
   if (during_switch) {
     double weight = ((time - first_control_received_time_).count()) /
