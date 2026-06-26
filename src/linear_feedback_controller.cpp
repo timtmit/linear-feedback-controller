@@ -157,14 +157,23 @@ const Eigen::VectorXd& LinearFeedbackController::compute_control(
   // Integration
   double delta_t = std::chrono::duration<double>(time - t0).count();
   // v(t) = dq*(t0) + ddq*(t0) * delta_t
-  integrated_velocity_ += control.feedforward.acceleration * delta_t;
+  // integrated_velocity_ += control.feedforward.acceleration * delta_t;
+  integrated_velocity_ = control.feedforward.velocity + control.feedforward.acceleration * delta_t;
 
   // integrated_position_ = pinocchio::integrate(robot_model_builder_->get_model(), integrated_position_, control.feedforward.velocity*delta_t);
   // q(t) = q0 + v0 * delta_t + 0.5 * a0 * delta_t^2
+  // integrated_position_ = pinocchio::integrate(
+  //     robot_model_builder_->get_model(), 
+  //     integrated_position_, 
+  //     integrated_velocity_ + 0.5 * control.feedforward.acceleration * delta_t * delta_t
+  // );
+  Eigen::VectorXd displacement = control.feedforward.velocity * delta_t + 
+                               0.5 * control.feedforward.acceleration * delta_t * delta_t;
+
   integrated_position_ = pinocchio::integrate(
       robot_model_builder_->get_model(), 
-      integrated_position_, 
-      integrated_velocity_ + 0.5 * control.feedforward.acceleration * delta_t * delta_t
+      control.feedforward.position,
+      displacement
   );
   // Switching Phase (PD -> LF)
   if (during_switch) {

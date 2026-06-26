@@ -212,7 +212,7 @@ return_type LinearFeedbackControllerRos::update_and_write_commands(
     return controller_interface::return_type::ERROR;
   }
   const TimePoint t0 = TimePoint(std::chrono::nanoseconds(input_control_.initial_state.stamp.nanoseconds()));
-  RCLCPP_INFO(get_node()->get_logger(),"%f", std::chrono::duration<double>(time_lfc - t0).count());
+  // RCLCPP_INFO(get_node()->get_logger(),"%f", std::chrono::duration<double>(time_lfc - t0).count());
 
   // Write the output of the control (joint effort), in the command interface.
   const auto joint_nv = lfc_.get_robot_model()->get_joint_nv();
