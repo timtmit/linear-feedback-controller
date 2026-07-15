@@ -245,12 +245,18 @@ bool LinearFeedbackControllerRos::update_parameters() {
   bool needs_update = parameter_listener_->is_old(parameters_);
   if (needs_update) {
     parameters_ = parameter_listener_->get_params();
+
+    // These are needed because ROS2 parameters don't handle empty arrays
+    remove_element(&parameters_.ignore_state_interfaces.position, "");
+    remove_element(&parameters_.ignore_state_interfaces.velocity, "");
+    remove_element(&parameters_.ignore_state_interfaces.effort, "");
   }
   return needs_update;
 }
 
 bool LinearFeedbackControllerRos::read_state_from_references() {
   const auto joint_nv = lfc_.get_robot_model()->get_joint_nv();
+
 
   if (lfc_.get_robot_model()->get_robot_has_free_flyer()) {
     constexpr Eigen::Index base_pose_size = 7;
@@ -259,10 +265,10 @@ bool LinearFeedbackControllerRos::read_state_from_references() {
     // Offsets in reference_interfaces_.
     const Eigen::Index offset_base_pose = 0;
     const Eigen::Index offset_joint_pos = offset_base_pose + base_pose_size;
-    const Eigen::Index offset_base_twist = offset_joint_pos + joint_nv;
+    const Eigen::Index offset_base_twist = offset_joint_pos + joint_nv - parameters_.ignore_state_interfaces.position.size() ;
     const Eigen::Index offset_joint_vel = offset_base_twist + base_twist_size;
-    const Eigen::Index offset_joint_eff = offset_joint_vel + joint_nv;
-    const Eigen::Index expected_size = offset_joint_eff + joint_nv;
+    const Eigen::Index offset_joint_eff = offset_joint_vel + joint_nv - parameters_.ignore_state_interfaces.velocity.size();
+    const Eigen::Index expected_size = offset_joint_eff + joint_nv - parameters_.ignore_state_interfaces.effort.size();
 
     if (reference_interfaces_.size() != static_cast<size_t>(expected_size)) {
       RCLCPP_ERROR_STREAM(
@@ -287,10 +293,9 @@ bool LinearFeedbackControllerRos::read_state_from_references() {
   } else {
     // No free-flyer: only controlled joints.
     const Eigen::Index offset_joint_pos = 0;
-    const Eigen::Index offset_joint_vel = offset_joint_pos + joint_nv;
-    const Eigen::Index offset_joint_eff = offset_joint_vel + joint_nv;
-    const Eigen::Index expected_size = offset_joint_eff + joint_nv;
-
+    const Eigen::Index offset_joint_vel = offset_joint_pos + joint_nv - parameters_.ignore_state_interfaces.position.size();
+    const Eigen::Index offset_joint_eff = offset_joint_vel + joint_nv - parameters_.ignore_state_interfaces.velocity.size();
+    const Eigen::Index expected_size = offset_joint_eff + joint_nv - parameters_.ignore_state_interfaces.effort.size();
     if (reference_interfaces_.size() != static_cast<size_t>(expected_size)) {
       RCLCPP_ERROR_STREAM(
           get_node()->get_logger(),
@@ -495,6 +500,11 @@ bool LinearFeedbackControllerRos::load_parameters() {
     return false;
   }
   parameters_ = parameter_listener_->get_params();
+   // These are needed because ROS2 parameters don't handle empty arrays
+  remove_element(&parameters_.ignore_state_interfaces.position, "");
+  remove_element(&parameters_.ignore_state_interfaces.velocity, "");
+  remove_element(&parameters_.ignore_state_interfaces.effort, "");
+
   return true;
 }
 
@@ -549,10 +559,15 @@ bool LinearFeedbackControllerRos::setup_reference_interface() {
     reference_interface_names_.push_back("base_orientation_qz");
     reference_interface_names_.push_back("base_orientation_qw");
   }
+  auto ignored_pos_interfaces = parameters_.ignore_state_interfaces.position ;
   for (const auto& joint : lfc_.get_robot_model()->get_moving_joint_names()) {
-    const auto name = parameters_.chainable_controller.reference_prefix +
-                      joint + "/" + HW_IF_POSITION;
-    reference_interface_names_.emplace_back(name);
+    if (std::find(std::begin(ignored_pos_interfaces), std::end(ignored_pos_interfaces), joint) == std::end(ignored_pos_interfaces))
+    {
+      const auto name = parameters_.chainable_controller.reference_prefix +
+                        joint + "/" + HW_IF_POSITION;
+      reference_interface_names_.emplace_back(name);
+
+    }
   }
   if (lfc_.get_robot_model()->get_robot_has_free_flyer()) {
     reference_interface_names_.push_back("base_linear_velocity_x");
@@ -562,15 +577,24 @@ bool LinearFeedbackControllerRos::setup_reference_interface() {
     reference_interface_names_.push_back("base_angular_velocity_y");
     reference_interface_names_.push_back("base_angular_velocity_z");
   }
+  auto ignored_vel_interfaces = parameters_.ignore_state_interfaces.velocity ;
   for (const auto& joint : lfc_.get_robot_model()->get_moving_joint_names()) {
-    const auto name = parameters_.chainable_controller.reference_prefix +
-                      joint + "/" + HW_IF_VELOCITY;
-    reference_interface_names_.emplace_back(name);
+    if (std::find(std::begin(ignored_vel_interfaces), std::end(ignored_vel_interfaces), joint) == std::end(ignored_vel_interfaces))
+    {
+      const auto name = parameters_.chainable_controller.reference_prefix +
+                        joint + "/" + HW_IF_VELOCITY;
+      reference_interface_names_.emplace_back(name);
+
+    }
   }
+  auto ignored_eff_interfaces = parameters_.ignore_state_interfaces.effort ;
   for (const auto& joint : lfc_.get_robot_model()->get_moving_joint_names()) {
-    const auto name = parameters_.chainable_controller.reference_prefix +
-                      joint + "/" + HW_IF_EFFORT;
-    reference_interface_names_.emplace_back(name);
+    if (std::find(std::begin(ignored_eff_interfaces), std::end(ignored_eff_interfaces), joint) == std::end(ignored_eff_interfaces))
+    {
+      const auto name = parameters_.chainable_controller.reference_prefix +
+                        joint + "/" + HW_IF_EFFORT;
+      reference_interface_names_.emplace_back(name);
+    }
   }
   reference_interfaces_.resize(reference_interface_names_.size(),
                                std::numeric_limits<double>::quiet_NaN());

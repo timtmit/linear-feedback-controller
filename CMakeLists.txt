@@ -104,6 +104,8 @@ set(${PROJECT_NAME}_headers
     include/${PROJECT_NAME}/passthrough_controller.hpp
     include/${PROJECT_NAME}/pd_controller.hpp
     include/${PROJECT_NAME}/robot_model_builder.hpp
+    include/${PROJECT_NAME}/utils.hpp
+
 )
 set(${PROJECT_NAME}_sources
     src/joint_state_estimator.cpp #
@@ -113,6 +115,7 @@ set(${PROJECT_NAME}_sources
     src/passthrough_controller.cpp #
     src/pd_controller.cpp #
     src/robot_model_builder.cpp
+    src/utils.cpp
 )
 ament_auto_add_library(${PROJECT_NAME} ${${PROJECT_NAME}_sources}
                        ${${PROJECT_NAME}_headers}

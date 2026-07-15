@@ -27,6 +27,9 @@
 // Class to wrap in ROS
 #include "linear_feedback_controller/linear_feedback_controller.hpp"
 
+// Utils
+#include "linear_feedback_controller/utils.hpp"
+
 // Auto-generated header by the `generate_parameter_library` package.
 #include "linear_feedback_controller/generated_parameters.hpp"
 #include "linear_feedback_controller/handle_ros_versions.hpp"

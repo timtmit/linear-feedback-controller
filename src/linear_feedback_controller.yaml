@@ -55,3 +55,28 @@ linear_feedback_controller:
       gt_eq<>: 0.0
     }
   }
+  ignore_state_interfaces:
+    position: {
+      type: string_array,
+      description: "Names of the position state interfaces that will be ignored by the controller",
+      default_value: [],
+      validation: {
+        unique<>: null
+      },
+    }
+    velocity: {
+      type: string_array,
+      description: "Names of the velocity state interfaces that will be ignored by the controller",
+      default_value: [],
+      validation: {
+        unique<>: null
+      },
+    }
+    effort: {
+      type: string_array,
+      description: "Names of the effort state interfaces that will be ignored by the controller",
+      default_value: [],
+      validation: {
+        unique<>: null
+      },
+    }
