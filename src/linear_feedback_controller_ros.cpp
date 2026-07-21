@@ -516,6 +516,17 @@ bool LinearFeedbackControllerRos::load_linear_feedback_controller(
   lfc_params.controlled_joint_names = parameters_.moving_joint_names;
   lfc_params.p_gains.clear();
   lfc_params.d_gains.clear();
+  const auto& command_interfaces = parameters_.chainable_controller.command_interfaces;
+
+  if (command_interfaces.size() != lfc_params.moving_joint_names.size()) {
+    RCLCPP_ERROR(get_node()->get_logger(),
+                 "Size mismatch: %zu moving_joint_names vs %zu "
+                 "command_interfaces. They must be declared in the same "
+                 "order, one command interface per moving joint.",
+                 lfc_params.moving_joint_names.size(),
+                 command_interfaces.size());
+    return false;
+  }
   for (size_t i = 0; i < lfc_params.moving_joint_names.size(); ++i) {
     const std::string& joint_name = parameters_.moving_joint_names[i];
     const auto& joint_params =
@@ -524,7 +535,21 @@ bool LinearFeedbackControllerRos::load_linear_feedback_controller(
     lfc_params.p_gains.emplace_back(joint_params.p);
     lfc_params.d_gains.emplace_back(joint_params.d);
 
-    const std::string& interface_type = joint_params.interface_type;
+    // Interface type
+    const std::string& cmd_if = command_interfaces[i];
+    const auto slash_pos = cmd_if.find_last_of('/');
+    const std::string interface_type = (slash_pos == std::string::npos) ? cmd_if : cmd_if.substr(slash_pos + 1);
+    // Sanity check
+    if (cmd_if.find(joint_name) == std::string::npos) {
+      RCLCPP_ERROR(get_node()->get_logger(),
+                   "Command interface '%s' at index %zu does not seem to "
+                   "match moving joint '%s'. Check that "
+                   "chainable_controller.command_interfaces is ordered "
+                   "exactly like moving_joint_names.",
+                   cmd_if.c_str(), i, joint_name.c_str());
+      return false;
+    }
+
     if (interface_type == "effort") {
       lfc_params.joint_effort_idx.push_back(static_cast<int>(i));
     } else if (interface_type == "position") {

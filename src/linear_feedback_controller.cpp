@@ -177,8 +177,8 @@ const Eigen::VectorXd& LinearFeedbackController::compute_control(
   );
   // Switching Phase (PD -> LF)
   if (during_switch) {
-    double weight = ((time - first_control_received_time_).count()) /
-                  params_.pd_to_lf_transition_duration.count();
+    double weight = (double)((time - first_control_received_time_).count()) /
+                  (double)params_.pd_to_lf_transition_duration.count();
     weight = std::clamp(weight, 0.0, 1.0);
     
     control_pd_ = pd_controller_.compute_control(sensor_js.position, sensor_js.velocity);
