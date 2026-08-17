@@ -64,6 +64,30 @@ inline auto PrintTo(const Sensor& sensor, std::ostream* os) noexcept -> void {
   *os << '}';
 }
 
+inline auto PrintTo(const Feedforward& ff, std::ostream* os) noexcept -> void {
+  if (os == nullptr) return;
+
+  *os << "Feedforward{";
+
+  *os << ".effort = ";
+  PrintTo(ff.effort, os, {.with_size = true});
+  *os << ", ";
+
+  *os << ".position = ";
+  PrintTo(ff.position, os, {.with_size = true});
+  *os << ", ";
+
+  *os << ".velocity = ";
+  PrintTo(ff.velocity, os, {.with_size = true});
+  *os << ", ";
+
+  *os << ".acceleration = ";
+  PrintTo(ff.acceleration, os, {.with_size = true});
+
+  *os << '}';
+}
+
+
 inline auto PrintTo(const Control& ctrl, std::ostream* os) noexcept -> void {
   if (os == nullptr) return;
   *os << "Control{";
@@ -85,11 +109,7 @@ inline auto PrintTo(const Control& ctrl, std::ostream* os) noexcept -> void {
   *os << ", ";
 
   *os << ".feedforward = ";
-  PrintTo(ctrl.feedforward, os,
-          {
-              // .strip = {.head = 2, .tail = 2},
-              .with_size = true,
-          });
+  PrintTo(ctrl.feedforward, os);
   *os << ", ";
 
   *os << ".initial_state = ";

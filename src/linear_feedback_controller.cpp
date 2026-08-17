@@ -155,6 +155,37 @@ const Eigen::VectorXd& LinearFeedbackController::compute_control(
   }
 
   // Integration
+  const int nq = robot_model_builder_->get_nq();
+  const int nv = robot_model_builder_->get_nv();
+
+  if (control.feedforward.position.size() != nq) {
+    std::stringstream ss;
+    ss << "[LFC] compute_control: unexpected control.feedforward.position "
+          "size="
+       << control.feedforward.position.size() << " (expected " << nq
+       << " = nq)";
+    std::cerr << ss.str() << std::endl;
+    throw std::invalid_argument(ss.str());
+  }
+  if (control.feedforward.velocity.size() != nv) {
+    std::stringstream ss;
+    ss << "[LFC] compute_control: unexpected control.feedforward.velocity "
+          "size="
+       << control.feedforward.velocity.size() << " (expected " << nv
+       << " = nv)";
+    std::cerr << ss.str() << std::endl;
+    throw std::invalid_argument(ss.str());
+  }
+  if (control.feedforward.acceleration.size() != nv) {
+    std::stringstream ss;
+    ss << "[LFC] compute_control: unexpected "
+          "control.feedforward.acceleration size="
+       << control.feedforward.acceleration.size() << " (expected " << nv
+       << " = nv)";
+    std::cerr << ss.str() << std::endl;
+    throw std::invalid_argument(ss.str());
+  }
+
   double delta_t = std::chrono::duration<double>(time - t0).count();
   // v(t) = dq*(t0) + ddq*(t0) * delta_t
   // integrated_velocity_ += control.feedforward.acceleration * delta_t;
@@ -175,6 +206,39 @@ const Eigen::VectorXd& LinearFeedbackController::compute_control(
       control.feedforward.position,
       displacement
   );
+
+  const auto& model = robot_model_builder_->get_model();
+  const auto& moving_names = robot_model_builder_->get_moving_joint_names();
+  const auto& pin_to_hwi =
+      robot_model_builder_->get_pinocchio_to_hardware_interface_map();
+
+  Eigen::VectorXd hw_position = Eigen::VectorXd::Zero(joint_hw_nq);
+  Eigen::VectorXd hw_velocity = Eigen::VectorXd::Zero(joint_hw_nq);
+
+  for (std::size_t k = 0; k < moving_names.size(); ++k) {
+    const auto joint_id = model.getJointId(moving_names[k]);
+    const auto& jmodel = model.joints[joint_id];
+    const int idx_q = jmodel.idx_q();
+    const int idx_v = jmodel.idx_v();
+    const int nq_k = jmodel.nq();
+    const int hw_idx = pin_to_hwi.at(static_cast<int>(k));
+
+    if (nq_k == 1) {
+      // Joint 1DOF
+      hw_position(hw_idx) = integrated_position_(idx_q);
+    } else if (nq_k == 2) {
+      // Joint SO(2) : q = (cos theta, sin theta)
+      hw_position(hw_idx) =
+          std::atan2(integrated_position_(idx_q + 1), integrated_position_(idx_q));
+    } else {
+      std::stringstream ss;
+      ss << "[LFC] compute_control: unsupported nq=" << nq_k
+        << " for joint '" << moving_names[k] << "' during hardware position extraction";
+      throw std::logic_error(ss.str());
+    }
+
+    hw_velocity(hw_idx) = integrated_velocity_(idx_v);
+  }
   // Switching Phase (PD -> LF)
   if (during_switch) {
     double weight = (double)((time - first_control_received_time_).count()) /
@@ -191,9 +255,8 @@ const Eigen::VectorXd& LinearFeedbackController::compute_control(
       for (int i : params_.joint_effort_idx) {
         control_(i) = (1.0 - weight) * control_pd_(i) + weight * control_lf_(i);
       }
-    // vel/pos : interpolation directe, pas de transition PD
-    for (int i : params_.joint_position_idx) control_(i) = integrated_position_(i);
-    for (int i : params_.joint_velocity_idx) control_(i) = integrated_velocity_(i);
+    for (int i : params_.joint_position_idx) control_(i) = hw_position(i);
+    for (int i : params_.joint_velocity_idx) control_(i) = hw_velocity(i);
     return control_;
   }
 
@@ -202,8 +265,8 @@ const Eigen::VectorXd& LinearFeedbackController::compute_control(
   if (remove_gravity_compensation_effort) control_lf_ -= tau_gravity_;
   // Commands routing
   for (int i : params_.joint_effort_idx)   control_(i) = control_lf_(i);
-  for (int i : params_.joint_position_idx) control_(i) = integrated_position_(i);
-  for (int i : params_.joint_velocity_idx) control_(i) = integrated_velocity_(i);
+  for (int i : params_.joint_position_idx) control_(i) = hw_position(i);
+  for (int i : params_.joint_velocity_idx) control_(i) = hw_velocity(i);
 
   return control_;
 }

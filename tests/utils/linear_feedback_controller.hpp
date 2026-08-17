@@ -12,7 +12,10 @@ namespace tests::utils {
 inline auto MakeAllControllerParametersFrom(
     std::string_view urdf,
     std::initializer_list<std::vector<JointDescription>> all_joint_lists,
-    std::initializer_list<linear_feedback_controller::Duration> durations)
+    std::initializer_list<linear_feedback_controller::Duration> durations,
+    std::vector<int> joint_effort_idx,
+    std::vector<int> joint_position_idx,
+    std::vector<int> joint_velocity_idx)
     -> std::vector<linear_feedback_controller::ControllerParameters> {
   using linear_feedback_controller::ControllerParameters;
 
@@ -39,6 +42,9 @@ inline auto MakeAllControllerParametersFrom(
             .controlled_joint_names = controlled,
             .robot_has_free_flyer = has_free_flyer,
             .pd_to_lf_transition_duration = duration,
+            .joint_effort_idx=joint_effort_idx,
+            .joint_position_idx=joint_position_idx,
+            .joint_velocity_idx=joint_velocity_idx,
         });
       }
     }

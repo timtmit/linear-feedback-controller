@@ -71,7 +71,11 @@ inline auto MakeValidRandomControlFor(
   linear_feedback_controller_msgs::Eigen::Control control;
 
   // get_n* function take into account the free flyer stuff
-  control.feedforward = Eigen::VectorXd::Random(model.get_joint_nv());
+  control.feedforward.effort = Eigen::VectorXd::Random(model.get_joint_nv());
+  control.feedforward.position = Eigen::VectorXd::Random(model.get_nq());
+  control.feedforward.velocity = Eigen::VectorXd::Random(model.get_joint_nv());
+  control.feedforward.acceleration = Eigen::VectorXd::Random(model.get_joint_nv());
+
   control.feedback_gain = Eigen::MatrixXd::Random(
       /* rows = */ model.get_joint_nv(),
       /* cols = */ model.get_nv() * 2);
@@ -92,9 +96,12 @@ inline auto MakeValidRandomControlFor(
 inline auto ExpectedLFControlFrom(
     const linear_feedback_controller::RobotModelBuilder& model,
     const linear_feedback_controller_msgs::Eigen::Sensor& sensor,
-    const linear_feedback_controller_msgs::Eigen::Control& control)
+    const linear_feedback_controller_msgs::Eigen::Control& control,
+    std::vector<int> joint_effort_idx,
+    std::vector<int> joint_position_idx,
+    std::vector<int> joint_velocity_idx)
     -> Eigen::VectorXd {
-  Eigen::VectorXd out;
+  Eigen::VectorXd out = Eigen::VectorXd::Zero(model.get_joint_nv());
 
   const auto x = RobotState::From(sensor, model.get_robot_has_free_flyer());
   const auto x_0 =
@@ -104,10 +111,53 @@ inline auto ExpectedLFControlFrom(
   pinocchio::difference(model.get_model(), x.position, x_0.position,
                         error.head(model.get_model().nv));
   error.tail(model.get_model().nv) = x_0.velocity - x.velocity;
+  Eigen::VectorXd effort =
+    control.feedforward.effort +
+    control.feedback_gain * error;
+  
+  const auto& pin_model = model.get_model();
+  const auto& moving_names = model.get_moving_joint_names();
+  const auto& pin_to_hwi =
+      model.get_pinocchio_to_hardware_interface_map();
 
-  out = control.feedforward + (control.feedback_gain * error);
+  Eigen::VectorXd hw_position =
+      Eigen::VectorXd::Zero(model.get_nq());
+  Eigen::VectorXd hw_velocity =
+      Eigen::VectorXd::Zero(model.get_joint_nv());
+
+  for (std::size_t k = 0; k < moving_names.size(); ++k)
+  {
+      const auto joint_id = pin_model.getJointId(moving_names[k]);
+      const auto& jmodel = pin_model.joints[joint_id];
+
+      const int idx_q = jmodel.idx_q();
+      const int idx_v = jmodel.idx_v();
+      const int hw_idx = pin_to_hwi.at(static_cast<int>(k));
+
+      if (jmodel.nq() == 1)
+      {
+          hw_position(hw_idx) = x_0.position(idx_q);
+      }
+      else if (jmodel.nq() == 2)
+      {
+          hw_position(hw_idx) =
+              std::atan2(x_0.position(idx_q + 1),
+                        x_0.position(idx_q));
+      }
+
+      hw_velocity(hw_idx) = x_0.velocity(idx_v);
+  }
+  for (int i : joint_effort_idx)
+    out(i) = effort(i);
+
+  for (int i : joint_position_idx)
+      out(i) = hw_position(i);
+
+  for (int i : joint_velocity_idx)
+      out(i) = hw_velocity(i);
+
   return out;
-}
+  }
 
 }  // namespace tests::utils
 

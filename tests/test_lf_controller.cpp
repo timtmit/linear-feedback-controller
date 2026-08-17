@@ -58,7 +58,7 @@ TEST_F(LFControllerTest, ComputesCorrectControlSignal) {
   linear_feedback_controller_msgs::Eigen::Control control_msg;
   control_msg.initial_state.joint_state.position = q_desired;
   control_msg.initial_state.joint_state.velocity = v_desired;
-  control_msg.feedforward = feedforward_input;
+  control_msg.feedforward.effort = feedforward_input;
   control_msg.feedback_gain = feedback_gain_input;
 
   // Compute error state
